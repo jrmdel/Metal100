@@ -4,4 +4,4 @@ This study was part of a school project. We had to find a dataset and extract va
 
 These data were retrieved via the Spotify API. At this date, the API provides even more information such as the liveness of a song, the speechiness of a song or even the mode. Further analysis could be done thanks to that.
 
-Here is our analysis, written in French.
+Feel free to check the file `main.r` that contains the essential lines of code that helped us create useful graphs. If you want more details on what we extracted, you can check our analysis, written in French.
