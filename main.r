@@ -5,9 +5,9 @@ library(tidyr)
 library(ggplot2)
 
 # Load data
-dataAlbums <- read_excel("./metal_dataset_albums.xlsx")
-dataSongs <- read_excel("./metal_dataset_songs.xlsx")
-songsFromCsv <- read.csv("./dataAcpExtract.csv")
+dataAlbums <- read_excel("./data/metal_dataset_albums.xlsx")
+dataSongs <- read_excel("./data/metal_dataset_songs.xlsx")
+songsFromCsv <- read.csv("./data/dataAcpExtract.csv")
 dataSongs100 <- data.frame(songsFromCsv)[,-c(1)]
 
 # Song distribution

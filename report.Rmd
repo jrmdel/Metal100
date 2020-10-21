@@ -3,9 +3,9 @@ title: "Analyse et fouille de données"
 author: "Pauline Decool - Jérémie Deletraz"
 date: "15/01/2020"
 output:
-  pdf_document: default
-  word_document: default
   html_document: default
+  word_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -41,7 +41,7 @@ Nous avons travaillé sur 2 jeux de données :
 * un comportant l'ensemble des chansons présentes sur ces albums, soit **1046 entrées**. Cette table nous permet d'avoir des informations précieuses sur les musiques, celles-ci étant récupérées via l'API Spotify. 
 
 ```{r message=FALSE}
-dataAlbums <- read_excel("~/Documents/metal_dataset_albums.xlsx")
+dataAlbums <- read_excel("./data/metal_dataset_albums.xlsx")
 kable(dataAlbums[25:30,])
 
 ```
@@ -51,7 +51,7 @@ Ci-dessus, nous retrouvons un aperçu du dataframe comprenant les albums. Ils so
 
 
 ```{r}
-dataSongs <- read_excel("~/Documents/metal_dataset_songs.xlsx")
+dataSongs <- read_excel("./data/metal_dataset_songs.xlsx")
 kable(dataSongs[c(1,21,150,200,350),c(1,8,10:17)])
 ```
 
@@ -142,7 +142,7 @@ Lors de notre étude, nous avons obtenu ces graphiques :
 ```{r}
 # Nous avons au préalable généré un jeu de données de 100 individus, tirés au hasard.
 # Nous l'importons pour l'analyser.
-songsFromCsv <- read.csv("~/Documents/dataAcpExtract.csv")
+songsFromCsv <- read.csv("./data/dataAcpExtract.csv")
 dataSongs100 <- data.frame(songsFromCsv)[,-c(1)]
 
 res.pca <- PCA(dataSongs100, quanti.sup=c(3), quali.sup=1)
