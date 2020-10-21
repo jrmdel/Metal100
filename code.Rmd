@@ -1,0 +1,244 @@
+---
+title: "Analyse et fouille de données"
+author: "Pauline Decool - Jérémie Deletraz"
+date: "15/01/2020"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introduction
+
+Lors de ce projet, nous nous intéressons aux différentes méthodes d’analyses de données vues en cours. Le but est de réussir à obtenir des informations claires et pertinentes à partir d’une base de données assez conséquente et donc peu lisible; pour cela, nous utilisons l’outil R et plus particulièrement la librairie FactoMineR.
+
+Nous travaillons sur un jeu de données regroupant des renseignements sur les chansons des 100 meilleurs albums de métal d’après le magazine Rolling Stones.
+
+Nous disposons d’informations assez variées sur les morceaux de musique allant du nom de l’artiste au nombre de battements par minutes. Nous avons choisi d’utiliser la méthode d’analyse en composantes principales qui offre une comparaison assez globales des individus et des variables numériques dont nous disposons. Nous affinerons notre analyse en utilisant la méthode d’analyse factorielle des composantes. Cette analyse nous permettra de mettre en évidence des corrélations entre les individus sur la base de variables qualitatives. Enfin, nous utiliserons la méthode d’analyse à composante multiple.
+
+
+# Mise en place
+
+Avant de pouvoir utiliser les fonctions d'analyse, il nous a fallu importer assez classiquement les librairies adéquates.
+
+```{r message=FALSE}
+library(FactoMineR) # pour les analyses
+library(readxl)     # pour l'import de données
+library(knitr)      # pour l'affichage des tables
+library(dplyr)      # pour manipuler les données
+library(tidyr)      # pour un supplément de manipulation
+library(ggplot2)    # pour tracer les graphes
+```
+
+Nous avons travaillé sur 2 jeux de données :
+
+* un comportant les **100 albums** du classement.
+* un comportant l'ensemble des chansons présentes sur ces albums, soit **1046 entrées**. Cette table nous permet d'avoir des informations précieuses sur les musiques, celles-ci étant récupérées via l'API Spotify. 
+
+```{r message=FALSE}
+dataAlbums <- read_excel("~/Documents/metal_dataset_albums.xlsx")
+kable(dataAlbums[25:30,])
+
+```
+
+Ci-dessus, nous retrouvons un aperçu du dataframe comprenant les albums. Ils sont, de base, triés selon leur classement (la colonne *Rank*). Cette table contient également les colonnes artiste, album, label, sous-genre de Metal, l'origine du groupe, l'année de sortie de l'album et enfin la durée totale de l'album en secondes.
+
+
+
+```{r}
+dataSongs <- read_excel("~/Documents/metal_dataset_songs.xlsx")
+kable(dataSongs[c(1,21,150,200,350),c(1,8,10:17)])
+```
+
+Ce deuxième aperçu représente cette fois une partie des colonnes présentes dans le dataframe des chansons. En effet, il reprend l'intégralité des colonnes du premier, auquel sont rajoutées les informations relatives à chaque chanson. Nous allons expliciter chacune d'elles[¹] : 
+
+* BPM (*Beat Per Minute*) : il s'agit du tempo de la musique, en battement par minute.
+* Energy : il s'agit d'un score de 0 à 100 déterminant si une musique est intense et dégage de l'énergie, 0 étant calme et 100 très énergique.
+* Dance : il s'agit du caractère dansant de la musique. Ce score est établi en étudiant le tempo, la régularité du rythme, et l'intensité du battement : 0 étant peu dansant et 100 fortement dansant.
+* Loud : il s'agit du volume global de la chanson, et s'étend généralement de -60 à 0 dB. Dans notre dataset, les valeurs se situent entre -35 et -1dB.
+* Valence : il s'agit d'une mesure entre 0 et 100 de la positivité véhiculée par un morceau, 0 correspondant à une musique triste, mélancolique ou reflétant la colère, et 100 correspondant à une musique joyeuse.
+* Duration : la durée de la piste audio en secondes.
+* Acoustic : il s'agit d'une mesure de confiance entre 0 et 100 évaluant le caractère acoustique d'un morceau, 100 correspondant à une haute  confiance dans le fait que le morceau soit acoustique.
+* Popularity : il s'agit d'un calcul ramené entre 0 et 100 de la popularité d'un morceau, 100 étant le plus populaire. La popularité est calculée par un algorithme Spotify et se base principalement sur le nombre total d'écoutes et à quel point ces écoutes ont été récentes. Les musiques ayant été très populaires dans le passé auront donc un score plus faible que les musiques étant fortement écoutées actuellement.
+
+
+[¹]: Le détail des features proposées par l'API Spotify est disponible en suivant ce [lien](https://developer.spotify.com/documentation/web-api/reference/tracks/get-audio-features/) 
+
+
+# Etude préalable
+
+Il nous a paru intéressant d'effectuer une première étude sur les données, afin de nous donner une vision globale de l'ensemble des individus de notre dataset. En effet, pour les analyses statistiques, il sera plus aisé de travailler sur un dataset réduit, d'une centaine d'individus, afin d'avoir des graphes moins lourds et une meilleure lisibilité.
+
+Un premier graphe qu'il nous a paru pertinent d'incorporer est celui de la répartition des musiques au cours du temps : 
+
+```{r}
+years <- dataSongs$`Release Year`
+h <- hist(years,
+     main= title("Distribution of songs per 5-year time"),
+     xlab="Years", ylab="Number of songs", col="mediumpurple"
+)
+text(h$mids,h$counts,labels=h$counts, adj=c(0.5, -0.5),cex = 0.6)
+```
+
+\begin{center} figure 1 : distribution du nombre de chansons par quinquennat \end{center}
+
+Nous voyons ainsi qu'une grande partie des titres présents dans le classement se situent entre 1980 et 1995. Cela ne veut pas forcément dire que plus de titres ont été enregistrés durant cette période, mais plutôt que les albums iconiques de ce genre musical ont vu le jour ces années-là.
+
+
+```{r message=FALSE}
+dataMean <- dataSongs[,c(6,10:17)] %>% group_by(`Release Year`) %>% summarise(
+  BPM=mean(`BPM`),
+  Dance=mean(`Dance`),
+  Energy=mean(`Energy`),
+  Valence=mean(`Valence`),
+  Acoustic=mean(`Acoustic`),
+  Popularity=mean(`Popularity`),
+)
+kable(dataMean[15:20,])
+```
+```{r echo=FALSE}
+dataMean <- dataSongs[,c(6,10:17)] %>% group_by(`Release Year`) %>% summarise(
+  BPM=mean(`BPM`)-50,
+  Dance=mean(`Dance`),
+  Energy=mean(`Energy`),
+  Valence=mean(`Valence`),
+  Acoustic=mean(`Acoustic`),
+  Popularity=mean(`Popularity`),
+)
+```
+
+
+```{r message=FALSE}
+dataGather <- dataMean %>% gather(key = `Audio Feature`, value = Score, -`Release Year`)
+
+dataGather %>% ggplot(
+  aes(x=`Release Year`, y=Score, group=`Audio Feature`, fill=`Audio Feature`)) +
+  geom_line() + geom_smooth(method = lm) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, size=14)
+  ) +
+  ggtitle("Mean audio feature per year") +
+  facet_wrap(~`Audio Feature`)
+```
+\begin{center} figure 2 : évolution de la musique métal en fonction du temps \end{center}
+
+Ces graphiques représentent l’évolution en fonction du temps des caractéristiques ‘Acoustic’, ‘BPM’, ‘Dance’, ‘Energy’, ‘Popularity’, ‘Valence’. On peut voir que les musiques plus récentes ont tendance à être moins joyeuses, moins populaires et moins dansantes que les musiques plus anciennes. 
+
+
+# Analyse en Composantes Principales
+
+Pour effectuer notre analyse de données, nous désignons aléatoirement 100 tuples qui feront le sujet de notre étude. Ceci nous permet de pouvoir visualiser les données de façon plus lisible.
+La méthode d’analyse en composantes principales prend en compte les caractéristiques quantitatives uniquement.
+L’algorithme place les données dans un plan en fonction des caractéristiques qui leur correspondent. Plus les données ont des caractéristiques ressemblantes, plus elles sont proches spatialement.
+
+Lors de notre étude, nous avons obtenu ces graphiques :
+
+```{r}
+# Nous avons au préalable généré un jeu de données de 100 individus, tirés au hasard.
+# Nous l'importons pour l'analyser.
+songsFromCsv <- read.csv("~/Documents/dataAcpExtract.csv")
+dataSongs100 <- data.frame(songsFromCsv)[,-c(1)]
+
+res.pca <- PCA(dataSongs100, quanti.sup=c(3), quali.sup=1)
+
+```
+
+
+L'ACP nous ressort deux figures : le graphe des individus, et le graphe des variables (resp. figure 3 et 4). Les caractéristiques prises en compte sont représentées sous forme de vecteurs, visibles dans la *figure 4*. Nous voyons également les 2 dimensions majoritaires conservées pour la constitution des graphes. Elles participent à décrire environ 60% de nos individus, ce qui est acceptable.
+
+Nous avons également généré une ACP sur l’ensemble de nos données, à savoir un millier de chansons et nous avons pu constater qu’elle était très proche de celle montrée en *figure 3*. Nous en avons ainsi déduit que les 100 chansons prises au hasard étaient assez représentatives de l’ensemble des chansons.
+
+On peut notamment constater que les caractéristiques ‘Valence’, ‘Popularity’ et ‘Dance’ sont corrélées entre elles et que les vecteurs qui leur sont associés sont tous opposés à celui de la caractéristique ‘Release Year’, ce qui confirme les informations que nous avons tirées des graphiques présentés en *figure 2*. De même, on peut voir que les caractéristiques ‘Loud’ et ‘Energy’ sont opposées à la caractéristique ‘Acoustic’, ce qui est logique. Cependant, on apprend que les caractéristiques ‘Acoustic’ et ‘Dance’ ne sont pas du tout corrélées.
+
+En comparant les *figures 3 et 4*, on peut déduire les caractéristiques des chansons et des styles musicaux. Prenons la chanson n°62 en exemple, visible dans la partie haute de notre graphe des individus. On voit qu’elle est plutôt dansante, joyeuse et populaire. En revanche, elle doit être assez vieille mais dans une moindre mesure car l’axe de ‘Release Year’ est plus petit et a donc une plus faible contribution dans la classification des individus.
+On vérifie les informations que nous avons déduites à partir des graphes en les comparant au tuple ci-dessous qui correspond à la chanson étudiée :
+
+```{r}
+kable(dataSongs100[62,])
+```
+
+La musique est bien dansante et a une valence assez élevée. L’année de sortie est de 1992, ce qui est au milieu de notre dataset. On voit donc que cette caractéristique n’est pas tout à fait bien représentée par nos graphes.
+
+Cette chanson est classée comme Rap Metal, on voit sur la *figure 3* que ce style de musique est assez proche sur le plan. En vérifiant dans le dataset, on se rend compte qu’il n’y a que deux chansons de ce genre là et qu’il est bien placé au milieu des deux. Les informations que nous obtenons des graphes sont dans l’ensemble cohérentes avec les données réelles.
+
+
+
+# Analyse Factorielle des Correspondances
+
+
+Nous travaillons cette fois-ci sur l’ensemble des 100 albums, desquels nous souhaitons tirer une relation entre les styles musicaux et les nationalités des groupes. 
+La méthode d’Analyse Factorielle des Correspondances prend en compte les caractéristiques qualitatives uniquement. On met ces données sous forme de tableau de contingence dont les lignes sont les pays et les colonnes les styles de musique. Dans les cases de ce tableau, on trouve le nombre d’individus ayant le pays correspondant à la ligne de la case et le style de musique correspondant à la colonne de la case.
+L’algorithme place ensuite les styles musicaux et les nationalités dans un même plan. 
+Plus un style de musique est produit par les groupes d’une certaine nationalité, plus le point correspondant au style de musique sera proche du point correspondant au pays.
+
+
+```{r out.width="170%"}
+res.ca = CA(
+  table(dataAlbums$Origin, dataAlbums$`Sub Metal Genre`)
+  )
+```
+\begin{center} figure 5 : graphe de l’AFC \end{center}
+
+On peut voir que le *Black Metal* très éloigné des autres styles de métal et très proches des points correspondants à la Suisse, au Danemark et à la Norvège. Il est notable d'observer que la Suisse et le Danemark se retrouvent positionner sur le même point. On peut en déduire qu'ils produisent exactement les mêmes styles de musique. Aussi, nous pouvons émettre l'hypothèse que le *Black Metal* est joué uniquement par des groupes de ces pays là mais aussi que ces pays ne produisent presque que du *Black Metal*. La relation est symétrique.
+Au contraire, on peut conclure que le *New Wave of British Metal* est uniquement produit en Angleterre mais que l’Angleterre ne produit pas que ce style de musique. En effet, le point de l’Angleterre est aussi tout aussi proche du point correspondant au *Heavy Metal* que du point correspondant au *New Wave of British Metal*.
+
+Nous pouvons cependant remettre en question ce résultat car les données dont nous disposons ne comportent presque que des albums américains et anglais. Le tableau suivant montre le nombre d’albums par pays dans notre base de données :
+
+```{r}
+albumsOrigin <- dataAlbums %>% 
+  group_by(`Origin`) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count))
+
+kable(albumsOrigin)
+```
+
+La remarque stipulant que le Danemark ne produisait que du Black Metal est donc vraie pour ce jeu de données mais peut être fausse si l'on considère un autre jeu de données. En tous cas, ce n’est certainement pas vrai pour l’ensemble des albums de métal produits au Danemark.
+
+
+# Analyse en Composantes Multiples
+
+Pour cette méthode, nous analysons notre jeu de données de 100 chansons. L'analyse à composantes multiples nous permet de représenter simultanément les individus et les variables. Ici, on a choisi de travailler avec les variables 'Acoustic', 'Energy' et 'Dance'; ces données sont chiffrées, c'est pourquoi nous devons les transformer avant de les utiliser. Nous allons séparer chaque caractéristique en 3 catégories 'faible', 'moyen' et 'élevé'. Nous nous sommes accordés pour diviser de la même manière chacune des variables, sans nous baser sur la distribution des valeurs au sein de notre jeu de données. Ainsi une valeur comprise entre 0 et 32 sera 'faible', entre 33 et 65, 'moyen' et entre 66 et 100 'élevé'.
+
+Dans une ACM, les données devant être fournies en entrée doivent être mise sous forme de tableau disjonctif complet. L'avantage du package *FactoMineR* est que nous nous contentons de lui fournir un dataframe, et la fonction MCA transforme directement les données qualitatives en tableau de disjonction. Ce tableau aura pour lignes les individus, à savoir les chansons et pour colonnes les 3 caractéristiques. Dans les cases du tableau on trouvera une valeur qui correspond à une catégorie.
+Le tableau aura la forme suivante :
+
+```{r}
+
+dataACM <- dataSongs100 %>% 
+  mutate(energie = ifelse(`Energy` < 33,"faible",ifelse(`Energy` < 66,"moyenne","élevée"))) %>%
+  mutate(acoustique = ifelse(`Acoustic` < 33,"faible",ifelse(`Acoustic` < 66,"moyen","élevé"))) %>%
+  mutate(dance = ifelse(`Dance` < 33,"faible",ifelse(`Dance` < 66,"moyen","élevé")))
+
+dataACMlight <- dataACM[,c(2,10:12)]
+
+kable(dataACMlight[c(37,62),])
+```
+```{r}
+res.mca <- MCA(dataACMlight, quanti.sup = 1, graph = FALSE)
+
+plot(res.mca, cex = 0.7, autoLab = "y", col.var = "black", col.ind = "pink1")
+```
+
+\begin{center} figure 6 : graphe de l’ACM \end{center}
+
+
+Nous pouvons voir sur ce graphe que 'Acoustic - élevé' est très proche de 'Energy - faible', une information que nous avions déjà rencontrée dans l’ACP. En effet, on voyait alors que les flèches 'Acoustic' et 'Energy' étaient orientées dans des sens opposés. De même, les catégories 'Acoustic - faible' et 'Energy - élevé' sont corrélées. On peut également constater des phénomènes intuitifs : les catégories  'Acoustic - faible' et 'Acoustic - élévé' sont très éloignées entre elles ainsi que les catégories 'Energy - faible' et 'Energy - élevé'.
+Par ailleurs, 'Dance - faible', 'Dance - moyen', 'Dance - élevé' sont assez proches car celles-ci sont relativement décorrélées des autres catégories.
+
+
+# Conclusion
+
+Le langage R est adapté à l’analyse de données massives, c’est un outil puissant qui nous permet de mettre en évidence des tendances. Nous avons pu observer notamment l’évolution des caractéristiques des albums en fonction de l’année de sortie de ceux-ci.
+
+Les graphes générés nous permettent également de visualiser les relations entre nos données de manière simple. On peut voir les similarités entre les styles musicaux, les caractéristiques qui vont de paire ou encore les liens entre les styles musicaux et les différentes caractéristiques prises en compte.
+
+Dans ce genre d’études, il est cependant important d’avoir un regard critique sur les données qu’on utilise et de se souvenir d’où elles proviennent. Ici, nous avons utilisé le classement subjectif d’un magazine sur les albums de métal. La présence ou non de certaines données dans notre analyse est donc biaisée par les goûts musicaux de la personne qui a effectué le classement. Nous ne pouvons ainsi pas affirmer que les informations que nous avons extraites de ces données restent vraies pour la totalité des albums de métal qui sont sortis depuis 1970.
+
+
